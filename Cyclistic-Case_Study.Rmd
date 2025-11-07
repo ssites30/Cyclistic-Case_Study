@@ -1,0 +1,714 @@
+---
+title: "Case Study: How Does a Bike-Share Company Navigate Speedy Success"
+subtitle: "This case study explores how Cyclistic, a fictional bike-share company in Chicago, can leverage rider behavior data to convert casual riders into annual members. The analysis uses real-world ride data from Q1 2019 and Q1 2020."
+author: "Shane Sites"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    css: "styles.css"
+    toc: true
+    toc_depth: 2
+    number_sections: true
+  word_document: default
+---
+
+<h2 style="color:#2E86C1;">Business Task</h2>
+
+<p><strong>Objective:</strong> Analyze behavioral differences between casual and annual members to inform a targeted marketing strategy aimed at increasing membership conversion.</p>
+
+<ul>
+  <li>Identify usage patterns that distinguish casual riders from members (e.g., ride duration, time of day, station preferences)</li>
+  <li>Generate actionable insights to support membership conversion efforts</li>
+</ul>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Load Required Packages</h2>
+
+<p>To support data preparation and analysis, we load a set of R packages that facilitate cleaning, visualization, and summary statistics. These tools ensure consistency and reproducibility throughout the workflow.</p>
+
+```{r Load Required Packages, message=FALSE, warning=FALSE}
+
+# Load tidyverse for data manipulation and visualization
+# janitor for cleaning column names
+# skimr for quick data summaries
+# scales for cleaner graph axis visuals
+library(tidyverse)
+library(janitor)
+library(skimr)
+library(scales)
+
+```
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;"> 
+
+<h2 style="color:#2E86C1;">Assign Data Frames and Clean Names</h2>
+
+<p>We begin by importing the Q1 2019 and Q1 2020 trip datasets, which contain ride-level details such as timestamps, station locations, and rider types. Column names are standardized using <code>clean_names()</code> from the janitor package to convert them to snake_case format, improving code readability and consistency.</p>
+
+```{r Assign data frames and clean names, message=FALSE, warning=FALSE}
+
+# Read in Q1 2019 and Q1 2020 trip data
+# Clean column names to snake_case for consistency
+q1_2019_raw <- read_csv("Divvy_Trips_2019_Q1.csv") %>% clean_names()
+q1_2020_raw <- read_csv("Divvy_Trips_2020_Q1.csv") %>% clean_names()
+
+```
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Identify Column Names and Types for Each Dataset for Harmonization</h2>
+
+<p>We compare the column structures of both datasets to identify discrepancies. This step informs the harmonization process required for accurate year-over-year analysis.</p>
+
+```{r Identify column names for each dataset for harmonization}
+
+# Columns present only in 2019 data
+setdiff(names(q1_2019_raw), names(q1_2020_raw))
+
+# Columns present only in 2020 data
+setdiff(names(q1_2020_raw), names(q1_2019_raw))
+
+```
+
+---
+
+<p>Next, we inspect the structure of the 2020 dataset to understand column types and confirm which fields are relevant for merging and analysis using the str() function.</p>
+
+```{r Inspect column names in q1_2020_raw to guide alignment of q1_2019}
+
+# Inspect the structure of the 2020 dataset to understand column types and guide harmonization
+str(q1_2020_raw)
+
+```
+
+<div style="padding:15px;">
+  <strong>Points of Note for Harmonization:</strong>
+  <ul>
+    <li><code>member_casual</code> replaces <code>usertype</code></li>
+    <li><code>ride_id</code> replaces <code>trip_id</code></li>
+    <li><code>rideable_type</code> replaces <code>bikeid</code></li>
+    <li><code>started_at</code> and <code>ended_at</code> replace <code>start_time</code> and <code>end_time</code></li>
+    <li><code>start_station_name</code> and <code>end_station_name</code> replace <code>from_station_name</code> and <code>to_station_name</code></li>
+    <li><code>start_station_id</code> and <code>end_station_id</code> replace <code>from_station_id</code> and <code>to_station_id</code></li>
+    <li><code>tripduration</code> will be recalculated from timestamps</li>
+    <li><code>gender</code> and <code>birthyear</code> are excluded from 2020 and dropped</li>
+    <li><code>start_lat</code>, <code>start_lng</code>, <code>end_lat</code>, and <code>end_lng</code> are new in 2020 — these geolocation fields enable mapping and spatial analysis of ride patterns. However, because similar location data is not available in the 2019 dataset, year-over-year spatial comparisons are not feasible.</li>
+  </ul>
+</div>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Harmonize 2019 Columns to Match 2020 Structure</h2>
+
+<p>To enable direct comparisons between years, we align the structure and data types of the 2019 dataset with the 2020 schema. This includes renaming columns, formatting timestamps, and standardizing rider type labels.</p>
+
+<p>We convert the <code>started_at</code> and <code>ended_at</code> columns in the 2020 dataset from character strings to POSIXct datetime format. This ensures consistent time-based calculations later in the analysis.</p>
+
+```{r Convert times to POSIXct, message=FALSE,warning=FALSE}
+
+# Convert timestamp columns from character to POSIXct datetime format
+# This ensures consistent time-based calculations (e.g., ride duration, day of week)
+q1_2020_clean <- q1_2020_raw %>% 
+  mutate(
+    started_at = as.POSIXct(started_at, format = "%Y-%m-%d %H:%M:%S"),  # Ride start time
+    ended_at   = as.POSIXct(ended_at,   format = "%Y-%m-%d %H:%M:%S")   # Ride end time
+  )
+
+
+
+```
+
+---
+
+<p>We then harmonize the 2019 dataset to match the 2020 schema. This includes:</p>
+
+<ul>
+  <li> Renaming columns to align with 2020 naming conventions</li>
+  <li> Adding missing geolocation fields with <code>NA</code> placeholders</li>
+  <li> Standardizing data types for consistency</li>
+  <li> Recoding rider types to match 2020 syntax</li>
+  <li> Selecting only the harmonized columns for merging</li>
+</ul>
+
+```{r Harmonize 2019 columns to match 2020 columns, message=FALSE,warning=FALSE}
+
+# Rename columns to match 2020 schema
+# This aligns naming conventions across years for seamless merging
+q1_2019_clean <- q1_2019_raw %>% 
+  rename(
+    ride_id = trip_id,                      # Unique ride identifier
+    started_at = start_time,                # Ride start timestamp
+    ended_at = end_time,                    # Ride end timestamp
+    start_station_name = from_station_name, # Origin station name
+    start_station_id = from_station_id,     # Origin station ID
+    end_station_name = to_station_name,     # Destination station name
+    end_station_id = to_station_id,         # Destination station ID
+    member_casual = usertype                # Rider type (Subscriber/Customer)
+  ) %>% 
+  
+  # Add missing columns and standardize values
+  mutate(
+    rideable_type = "legacy_bike",  # All 2019 rides used legacy bikes
+    start_lat = NA_real_,           # Geolocation not available in 2019
+    start_lng = NA_real_,
+    end_lat = NA_real_,
+    end_lng = NA_real_,
+    
+    # Standardize data types to match 2020
+    ride_id = as.character(ride_id),
+    started_at = as.POSIXct(started_at, format = "%Y-%m-%d %H:%M:%S"),
+    ended_at = as.POSIXct(ended_at, format = "%Y-%m-%d %H:%M:%S"),
+    start_station_name = as.character(start_station_name),
+    start_station_id = as.double(start_station_id),
+    end_station_name = as.character(end_station_name),
+    end_station_id = as.double(end_station_id),
+    
+    # Recode rider types to match 2020 syntax
+    member_casual = as.character(recode(member_casual,
+                                        "Subscriber" = "member",
+                                        "Customer"   = "casual"))
+  ) %>% 
+  
+  # Select only harmonized columns for merging
+  select(
+    ride_id, rideable_type, started_at, ended_at,
+    start_station_name, start_station_id,
+    end_station_name, end_station_id,
+    start_lat, start_lng, end_lat, end_lng,
+    member_casual
+  )
+
+```
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;"> 
+
+<h2 style="color:#2E86C1;">Merge the 2019 and 2020 Datasets into One Unified Data Frame</h2>
+
+<p>Now that both datasets share the same structure and data types, we can combine them into a single data frame using <code>bind_rows()</code>. This unified dataset will allow us to perform consistent, year-over-year analysis of rider behavior across Q1 2019 and Q1 2020.</p>
+
+```{r Merge datasets, message=FALSE,warning=FALSE}
+
+# Merge the cleaned 2019 and 2020 datasets into a single data frame
+# This enables unified analysis across both time periods
+q1_all <- bind_rows(q1_2019_clean, q1_2020_clean)
+
+```
+
+<p>The resulting <code>q1_all</code> data frame contains all rides from both quarters, with standardized columns for ride ID, timestamps, station details, rider type, and (where available) geolocation data.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;"> 
+
+<h2 style="color:#2E86C1;">Create Derived Columns: <code>ride_length_min</code> and <code>day_of_week</code></h2>
+
+<p>We generate new variables to quantify ride duration and categorize rides by day of the week. These derived fields support temporal analysis and help uncover behavioral patterns across rider types.</p>
+
+<p><strong>Note:</strong> We cannot calculate ride distance (e.g., <code>ride_miles</code>) because the 2019 dataset does not include geolocation data. As a result, spatial comparisons are limited to 2020 only.</p>
+
+```{r Create derived columns ride_length_min and day_of_week, message=FALSE,warning=FALSE}
+
+# Add new columns to quantify ride duration and categorize rides by weekday
+q1_all <- q1_all %>% 
+  mutate(
+    # Calculate ride length in minutes (rounded to 2 decimal places)
+    ride_length_min = round(as.numeric(ended_at - started_at, units = "mins"), 2),
+    
+    # Calculate ride length in full days (used for outlier detection)
+    ride_length_days = floor(as.numeric(ended_at - started_at) / 86400),
+    
+    # Extract weekday name from ride start timestamp
+    day_of_week = weekdays(started_at)
+  )
+
+```
+
+<p>These new columns allow us to:</p>
+<ul>
+  <li> Analyze ride duration trends across rider types and days</li>
+  <li> Explore weekly usage patterns (e.g., weekday vs weekend behavior)</li>
+  <li> Identify and filter out rides with implausible durations in later cleaning steps</li>
+</ul>
+
+---
+
+<p><strong>Note:</strong> We include a quick sanity check to confirm that the derived columns <code>ride_length_min</code>, <code>ride_length_days</code>, and <code>day_of_week</code> were created correctly and contain expected values. This helps catch formatting issues early and ensures our time-based calculations are reliable before moving into deeper analysis.</p>
+
+```{r Preview of Derived Columns}
+
+# Display the first few rows of the newly created columns
+# This sanity check confirms that ride duration and weekday values were calculated correctly
+q1_all %>% 
+  select(ride_length_min, ride_length_days, day_of_week) %>% 
+  head()
+
+```
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;"> 
+
+<h2 style="color:#2E86C1;">Validate Data Integrity</h2>
+
+<p>Before conducting any analysis, we validate the structure, completeness, and consistency of the merged dataset. This step helps identify missing values, unexpected data types, and outliers that could skew results.</p>
+
+```{r Skim merged dataset, message=FALSE, warning=FALSE}
+
+# Generate a high-level summary of the unified dataset
+# This includes row/column counts, data types, missing values, and distribution stats
+skim(q1_all)
+
+```
+
+<p><strong>Key Observations:</strong></p>
+<ul>
+  <li> <code>q1_all</code> contains <strong>791,956 rows</strong> and <strong>16 columns</strong></li>
+  <li> Column types: 6 character, 8 numeric, 2 POSIXct (timestamps)</li>
+  <li> No missing values in <code>ride_id</code>, <code>rideable_type</code>, or <code>member_casual</code></li>
+  <li> Geolocation fields (<code>start_lat</code>, <code>end_lat</code>, etc.) are 46% missing — expected due to 2019 data limitations</li>
+  <li> <code>ride_length_min</code> shows negative ride lengths and extreme outliers (e.g., max = 177,140 minutes ≈ 123 days). These will be filtered out in the next step to ensure analytical accuracy.</li>
+</ul>
+
+---
+
+```{r Rider type table}
+
+# Count the number of rides by rider type (casual vs member)
+# This confirms that rider labels were harmonized correctly across both datasets
+table(q1_all$member_casual)
+
+```
+
+<p>This confirms binary field values for the member_casual column.</p>
+
+<p>The dataset contains <strong>71,643 casual riders</strong> and <strong>720,313 members</strong>. This imbalance reflects Cyclistic’s existing user base and will be considered during comparative analysis.</p>
+
+---
+
+```{r Weekday distribution}
+
+# Count the number of rides that started on each weekday
+# This confirms only valid weekdays exist
+table(weekdays(q1_all$started_at))
+
+# Count the number of rides that ended on each weekday
+# This confirms only valid weekdays exist
+table(weekdays(q1_all$ended_at))
+
+```
+
+<p>Ride start and end times are well-distributed across all days of the week, with slightly higher volume on Tuesdays and Thursdays. This supports weekday vs weekend usage comparisons in later sections.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Filter Valid Rides: Remove Non-Rides and Outliers</h2>
+
+<p>To ensure analytical accuracy, we separate valid ride records from anomalous or unusable entries. These "non-rides" include:</p>
+
+<ul>
+  <li> Rides with zero or negative duration</li>
+  <li> Rides that start and end at the same station and last ≤ 1 minute (likely test or dock resets)</li>
+  <li> Rides longer than 1,440 minutes (24 hours), which are likely data errors</li>
+</ul>
+
+```{r Segregate Non-Rides and Outliers, message=FALSE, warning=FALSE}
+
+# Identify and isolate invalid or anomalous ride records
+# These include negative durations, ultra-short test rides, and excessively long trips
+q1_no_ride <- distinct(q1_all %>%
+  filter(
+    ride_length_min <= 0 |  # Rides with zero or negative duration
+    (start_station_name == end_station_name & ride_length_min <= 1) |  # Same-station rides ≤ 1 min
+    ride_length_min >= 1440  # Rides longer than 24 hours (likely data errors)
+  ))
+
+```
+
+<p><strong>Note:</strong> We use <code>distinct()</code> to ensure no duplicate entries are retained during filtering.</p>
+
+---
+
+<p>We now filter to retain only valid ride records by excluding entries with implausible durations or patterns. This includes:</p>
+<ul>
+  <li>Rides longer than one minute and shorter than 24 hours</li>
+  <li>Rides lasting one minute or less that start and end at different stations (e.g., brief transfers or short errands)</li>
+</ul>
+
+```{r Filter Valid Rides}
+
+# Filter out invalid or anomalous rides to retain only meaningful trip records
+# This includes rides longer than 1 minute and shorter than 24 hours,
+# plus short rides between different stations (e.g., quick transfers or short errands)
+q1_real_rides <- distinct(q1_all %>%
+  filter(
+    (ride_length_min > 1 & ride_length_min < 1440) |  # Standard rides: 1–1440 minutes
+    (start_station_name != end_station_name & ride_length_min <= 1)  # Short rides between different stations
+  ))
+
+```
+
+---
+
+<p><strong>Note:</strong> As a sanity check we quantify the impact of our filtering logic. By comparing the number of valid rides (<code>q1_real_rides</code>) to the number of excluded non-rides and outliers (<code>q1_no_ride</code>), we validate that our criteria are working as intended and assess how much data was removed due to quality concerns.</p>
+
+```{r Ride Filtering Summary}
+
+# Print the number of excluded rides (non-rides and outliers)
+cat("Number of non-rides and outliers:", nrow(q1_no_ride), "\n")
+
+# Print the number of valid rides retained for analysis
+cat("Number of valid rides retained:", nrow(q1_real_rides), "\n")
+
+```
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Histogram: Ride Length Distribution for Rides Under 1 Hour</h2>
+
+<p>This visualization explores ride durations under 60 minutes, comparing casual and member riders. By focusing on short-duration trips, we highlight behavioral differences in everyday usage patterns — such as commuting, errands, or leisure rides.</p>
+
+```{r Histogram Ride Length Under 60 Min, message=FALSE, warning=FALSE}
+
+# Reorder factor levels so "casual" is plotted after "member"
+q1_real_rides$member_casual <- factor(q1_real_rides$member_casual, levels = c("member", "casual"))
+
+# Plot overlapping histograms with casual on top
+ggplot(q1_real_rides %>% filter(ride_length_min < 60), aes(x = ride_length_min, fill = member_casual)) +
+  
+  geom_histogram(binwidth = 5, position = "identity", alpha = 0.6) +
+  
+  labs(
+    title = "Ride Length Distribution (<1 Hour)",
+    subtitle = "Q1 2019 & Q1 2020",
+    x = "Ride Length (min)",
+    y = "Frequency",
+    fill = "Rider Type"
+  ) +
+  
+  scale_y_continuous(labels = scales::comma)
+
+```
+
+<ul>
+  <li>Most rides fall under 60 minutes, but casual riders tend to take longer trips than members.</li>
+  <li>This suggests casual users may be paying more per ride, especially for trips in the 30–45 minute range.</li>
+  <li>Members cluster around shorter durations, likely reflecting routine commuting or errands.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Use this insight to promote membership as a better value for casual riders who frequently take mid-length trips. A side-by-side cost comparison could help nudge them toward joining.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Bar Chart: Weekly Ride Volume Comparison by Rider Type</h2>
+
+<p>This chart compares ride volume by weekday across rider types, revealing structured weekday usage by members and weekend surges by casual riders. It highlights behavioral segmentation and supports operational planning for fleet distribution and promotions.</p>
+
+```{r Bar Chart: Weekly Ride Volume Comparison by Rider Type}
+
+# Reorder weekday factor to ensure logical calendar order
+q1_real_rides$day_of_week <- factor(q1_real_rides$day_of_week,
+  levels = c( "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday","Sunday"))
+
+# Plot ride volume by weekday and rider type
+ggplot(q1_real_rides, aes(x = day_of_week, fill = member_casual)) +
+  
+  geom_bar(position = "dodge") +  # Side-by-side bars for casual vs member
+  
+  labs(
+    title = "Ride Count by Rider Type",
+    subtitle = "Q1 2019 & Q1 2020",
+    x = "Day of Week",
+    y = "Number of Rides",
+    fill = "Rider Type"
+  ) +
+  
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis with commas
+  
+  annotate("text", x = 5.2, y = 85000, label = "Rider Weekend Volume:\nMembers = Decreased\nCasuals = Increased", hjust = 0, size = 4) # Annotate graph describing weekend trend
+
+```
+
+<ul>
+  <li>Members ride most during the workweek, while casual riders spike on weekends.</li>
+  <li>This pattern reflects two distinct use cases: commuting vs leisure.</li>
+  <li>Weekend surges from casual riders present a clear opportunity for targeted promotions.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Offer weekend membership bundles or flexible plans that reward repeat weekend use. Messaging should highlight how even occasional riders can save money by switching to a membership.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Boxplot: Ride Length by Rider Type</h2>
+
+<p>This boxplot compares ride duration distributions between casual and member riders, focusing on trips under 60 minutes. It reveals that casual riders tend to take longer, more variable rides, while member rides are shorter and more consistent — useful for pricing and service design.</p>
+
+```{r Boxplot: Ride Length by Rider Type}
+
+# Create a boxplot comparing ride durations between casual and member riders
+ggplot(q1_real_rides, aes(x = member_casual, y = ride_length_min, fill = member_casual)) +
+  
+  # Draw boxplots for each rider type
+  geom_boxplot() +
+  
+  # Limit the y-axis to 0–60 minutes to focus on typical ride durations
+  coord_cartesian(ylim = c(0, 60)) +
+  
+  # Add a descriptive title and y-axis label
+  labs(
+    title = "Ride Length Distribution by Rider Type",
+    subtitle = "Q1 2019 & Q1 2020",
+    y = "Ride Length (min)"
+  )
+
+```
+
+<ul>
+  <li>Casual riders take longer, more varied trips — often for leisure or exploration.</li>
+  <li>Members ride shorter, more consistent durations, likely tied to commuting or errands.</li>
+  <li>The difference in ride length suggests casual riders may not realize how often they ride.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Use personalized ride summaries to show casual riders how their usage compares to members. Highlight how membership could reduce their per-ride cost and offer more flexibility.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Summary Table: Ride Count and Average Duration by Rider Type and Day of Week</h2>
+
+<p>This summary table captures ride count and average duration by rider type and weekday. It establishes a behavioral baseline for upcoming visualizations and supports analysis of usage patterns across time and rider segments.</p>
+
+```{r Summary Table: Ride Count and Average Duration by Rider Type and Day of Week}
+
+# Ensure weekday order is calendar-consistent for reporting and visualization
+q1_real_rides$day_of_week <- factor(q1_real_rides$day_of_week,
+  levels = c( "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday","Sunday"))
+
+# Group by rider type and weekday, then summarize ride count and average duration
+q1_avg_ride_length <- q1_real_rides %>%
+  group_by(member_casual, day_of_week) %>%  # Segment by rider type and weekday
+  summarise(
+    count = n(),  # Total number of rides
+    avg_ride_length = round(mean(ride_length_min), 2)  # Mean ride duration (minutes), rounded
+  ) %>%
+  arrange(member_casual, desc(count))  # Sort by rider type and descending ride volume
+
+# Print the summary table
+print(q1_avg_ride_length)
+
+```
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Bar Chart: Average Ride Length by Rider Type and Day of Week</h2>
+
+<p>This chart compares average ride duration across weekdays for casual and member riders. It highlights consistent, shorter rides by members and longer, leisure-oriented rides by casual users — especially on weekends.</p>
+
+```{r Bar Chart: Average Ride Length by Rider Type and Day of Week}
+
+# Reorder day_of_week as a factor to ensure calendar-consistent plotting
+q1_avg_ride_length$day_of_week <- factor(q1_avg_ride_length$day_of_week,
+  levels = c( "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday","Sunday"))
+
+# Create a bar chart showing average ride duration by rider type across weekdays
+ggplot(q1_avg_ride_length, aes(x = day_of_week, y = avg_ride_length, fill = member_casual)) +
+  
+  geom_bar(stat = "identity", position = "dodge") +  # Side-by-side bars for casual vs member
+  
+  labs(
+    title = "Average Ride Length by Rider Type and Day of Week",
+    subtitle = "Q1 2019 & Q1 2020",
+    x = "Day of Week",
+    y = "Average Ride Length (minutes)",
+    fill = "Rider Type"
+  ) +
+  
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis for readability
+  
+  theme_minimal()  # Clean visual style
+
+```
+
+<ul>
+  <li>Casual riders average 35–41 minutes per ride, especially on weekends.</li>
+  <li>Members average 11–13 minutes across all days, reflecting more structured usage.</li>
+  <li>This reinforces that casual riders are paying more per minute on average.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Consider a campaign that compares cost-per-minute for casual vs member rides. Position membership as a smarter choice for weekend riders who take longer trips.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Bar Chart: Ride Count by Hour of Day</h2>
+
+<p>This visualization shows hourly ride volume by rider type, revealing commute-driven peaks for members and afternoon leisure peaks for casual riders. It supports time-of-day planning for fleet availability and rider engagement.</p>
+
+```{r Bar Chart: Ride Count by Hour of Day}
+
+# Extract the hour from the ride start time to analyze hourly patterns
+q1_real_rides %>%
+  mutate(hour = lubridate::hour(started_at)) %>%  # Create an 'hour' column from timestamp
+  
+  # Plot ride count by hour of day, comparing member vs casual riders
+  ggplot(aes(x = hour, fill = member_casual)) +
+    geom_bar(position = "dodge") +  # Side-by-side bars for each rider type per hour
+    
+    labs(
+      title = "Ride Count by Hour of Day",
+      subtitle = "Q1 2019 & Q1 2020",
+      x = "Hour",
+      y = "Number of Rides",
+      fill = "Rider Type"
+    ) +
+  
+  annotate("text", x = 8.3, y = 80000, label = "Member riding volume peaks-->\n near beginning and end of\n <--standard working hours", hjust = 0, size = 3) # Annotate graph highlighting commuter trend
+
+```
+
+<ul>
+  <li>Members ride during commute hours, with peaks around 7–9 AM and 4–6 PM.</li>
+  <li>Casual riders favor afternoons and early evenings, likely for leisure or flexible errands.</li>
+  <li>This split suggests different motivations and opportunities for engagement.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Promote off-peak membership benefits to casual riders. Emphasize the convenience of unlimited rides without worrying about per-trip costs during their preferred hours.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Bar Chart: Ride Count by Week</h2>
+
+<p>This chart tracks weekly ride volume across the quarter, stacked by rider type. It reveals seasonal fluctuations, steady member usage, and casual spikes — useful for forecasting and campaign timing.</p>
+
+```{r Bar Chart: Ride Count by Week}
+
+# Extract the week number from the ride start timestamp
+q1_real_rides %>%
+  mutate(week = lubridate::week(started_at)) %>%  # Create a 'week' column (1–52)
+
+  # Plot weekly ride volume, stacked by rider type
+  ggplot(aes(x = week, fill = member_casual)) +
+    geom_bar(position = "stack") +  # Stacked bars show total volume with rider type breakdown
+
+    labs(
+      title = "Weekly Ride Volume by Rider Type",
+      subtitle = "Q1 2019 & Q1 2020",
+      x = "Week",
+      y = "Number of Rides"
+    )
+
+```
+
+<ul>
+  <li>Member usage is steady week to week, while casual rides show more variability.</li>
+  <li>Casual spikes often occur later in the quarter, possibly tied to weather or events.</li>
+  <li>This variability creates windows for timely promotions and conversion campaigns.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Use ride frequency to trigger targeted offers. For example, send a membership discount after a casual rider’s second or third ride in a month.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Bar Chart: Top Start Stations by Rider Type</h2>
+
+<p>This chart highlights the most popular start stations for each rider type. It reveals commuter-heavy hubs for members and scenic or high-traffic areas for casual riders, supporting station-level planning and targeted promotions.</p>
+
+```{r Bar Chart: Top Start Stations by Rider Type}
+
+# Group rides by rider type and start station, then count total rides per group
+q1_real_rides %>%
+  group_by(member_casual, start_station_name) %>%
+  summarise(count = n()) %>%  # Total rides per station per rider type
+  
+  top_n(10, count) %>%  # Select top 10 station/rider type combinations by ride count
+  
+  ggplot(aes(x = reorder(start_station_name, count), y = count, fill = member_casual)) +
+    geom_bar(stat = "identity", position = "dodge") +  # Side-by-side bars for rider types
+    
+    coord_flip() +  # Flip axes for better readability of station names
+    
+    labs(
+      title = "Top Start Stations by Rider Type",
+      subtitle = "Q1 2019 & Q1 2020",
+      x = "Station",
+      y = "Ride Count"
+    )
+
+```
+
+<ul>
+  <li>Highlights the most popular start stations for both casual and member riders.</li>
+  <li>Casual riders tend to favor high-traffic or scenic stations, often near parks or tourist areas.</li>
+  <li>Member riders show preference for stations near transit hubs or business districts.</li>
+  <li>Side-by-side bars allow direct comparison of station popularity across rider types.</li>
+  <li>This view supports station-level planning, targeted promotions, and infrastructure optimization.</li>
+</ul>
+
+<p><strong>Interpretation Tip:</strong> Use this chart to identify high-demand stations by rider type. Prioritize maintenance and bike availability at member-heavy commuter stations, and enhance signage or amenities at casual hotspots to support leisure riders.</p>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Key Conclusions</h2>
+
+<h3>Conversion-Focused Insights</h3>
+<ul>
+  <li>Casual riders tend to take longer trips, especially on weekends, averaging 34–41 minutes per ride.</li>
+  <li>Members ride more often and stick to shorter, consistent durations — typically 11–13 minutes — with clear peaks during weekday commuting hours.</li>
+  <li>Casual usage peaks in the afternoon and on weekends, while member activity is concentrated in the morning and late afternoon.</li>
+  <li>Casual riders show flexible, experience-driven behavior, while members follow structured, utility-based patterns.</li>
+</ul>
+
+<h3>Additional Opportunities</h3>
+<ul>
+  <li>Ride volume and timing patterns offer clear segmentation opportunities by day and hour.</li>
+  <li>Weekday dominance by members and weekend surges by casuals can guide fleet distribution and staffing.</li>
+  <li>Seasonal and hourly trends support campaign timing and operational planning.</li>
+</ul>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Recommended Actions</h2>
+
+<h3>Primary Strategy: Convert Casual Riders to Members</h3>
+<ul>
+  <li>Offer weekend membership bundles that match casual riders’ longer, leisure-focused trips.</li>
+  <li>Use ride history to trigger personalized offers after a rider completes multiple casual trips.</li>
+  <li>Highlight cost comparisons between casual pricing and membership value, especially for repeat users.</li>
+  <li>Promote trial memberships during peak casual windows — afternoons and weekends.</li>
+  <li>Use in-app prompts and email follow-ups to nudge casual riders toward joining after 2–3 rides.</li>
+</ul>
+
+<h3>Additional Opportunities</h3>
+
+<h4>Targeted Weekend Promotions</h4>
+<ul>
+  <li>Bundle scenic routes and extended rentals for casual riders.</li>
+  <li>Pair longer rides with local partner discounts or curated experiences.</li>
+</ul>
+
+<h4>Commute-Focused Member Retention</h4>
+<ul>
+  <li>Ensure bike availability during weekday rush hours in high-demand areas.</li>
+  <li>Partner with employers to offer membership perks and payroll integration.</li>
+</ul>
+
+<h4>Time-Based Pricing Strategy</h4>
+<ul>
+  <li>Introduce pricing tiers to encourage shorter casual rides and highlight member savings.</li>
+  <li>Cap casual ride costs around 30–45 minutes to make membership more attractive.</li>
+</ul>
+
+<h4>Behavioral Segmentation Campaigns</h4>
+<ul>
+  <li>Tailor messaging based on rider frequency, ride length, and time-of-day habits.</li>
+  <li>Segment promotions by weekday vs weekend usage to improve engagement.</li>
+</ul>
+
+<h4>Operational Optimization</h4>
+<ul>
+  <li>Shift fleet distribution to match weekday commuter demand and weekend leisure hotspots.</li>
+  <li>Use hourly ride data to guide staffing, maintenance, and promotional timing.</li>
+</ul>
+
+<hr style="border: 1px solid #2E86C1; margin: 30px 0;">
+
+<h2 style="color:#2E86C1;">Closing Statement</h2>
+
+<p>
+Cyclistic’s casual riders are already engaged — they’re taking longer trips, often on weekends, and paying per ride. That’s a clear opportunity. By aligning membership offers with how these riders actually use the service, Cyclistic can turn occasional users into loyal members. The data gives us more than just patterns — it gives us a strategy for smarter pricing, better service, and stronger retention.
+</p>
+
