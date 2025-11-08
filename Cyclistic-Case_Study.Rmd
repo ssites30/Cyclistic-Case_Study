@@ -1,8 +1,8 @@
 ---
 title: "Case Study: How Does a Bike-Share Company Navigate Speedy Success"
-subtitle: "This case study explores how Cyclistic, a fictional bike-share company in Chicago, can leverage rider behavior data to convert casual riders into annual members. The analysis uses real-world ride data from Q1 2019 and Q1 2020."
+subtitle: "This case study explores how Cyclistic, a fictional bike-share company in Chicago, can leverage rider behavior data to convert casual riders into annual members. The analysis uses the public data corresponding to the files named in the following link  <a href='https://divvy-tripdata.s3.amazonaws.com/index.html'>Divvy_Trips_2019_Q1.zip & Divvy_Trips_2020_Q1.zip</a>."
 author: "Shane Sites"
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+date: "11/7/2025"
 output:
   html_document:
     css: "styles.css"
@@ -11,6 +11,7 @@ output:
     number_sections: true
   word_document: default
 ---
+
 
 <h2 style="color:#2E86C1;">Business Task</h2>
 
@@ -525,7 +526,7 @@ ggplot(q1_avg_ride_length, aes(x = day_of_week, y = avg_ride_length, fill = memb
 ```
 
 <ul>
-  <li>Casual riders average 35–41 minutes per ride, especially on weekends.</li>
+  <li>Casual riders average 35–41 minutes per ride.</li>
   <li>Members average 11–13 minutes across all days, reflecting more structured usage.</li>
   <li>This reinforces that casual riders are paying more per minute on average.</li>
 </ul>
