@@ -1,8 +1,6 @@
 ---
 title: "Case Study: How Does a Bike-Share Company Navigate Speedy Success"
 subtitle: "This case study explores how Cyclistic, a fictional bike-share company in Chicago, can leverage rider behavior data to convert casual riders into annual members. The analysis uses the public data corresponding to the files named in the following link  <a href='https://divvy-tripdata.s3.amazonaws.com/index.html' target='_blank'>Divvy_Trips_2019_Q1.zip & Divvy_Trips_2020_Q1.zip</a>."
-author: "Author: Shane Sites"
-date: "Date 11/7/2025"
 output:
   html_document:
     css: "styles.css"
@@ -11,7 +9,12 @@ output:
     number_sections: true
   word_document: default
 ---
-
+<p>
+  View the full project on 
+  <a href="https://github.com/ssites30/Cyclistic-Case_Study" target="_blank">GitHub</a>.
+</p>
+<p>Author: Shane Sites</p>
+<p>Date: 11/7/2025"</p>
 
 <h2 style="color:#2E86C1;">Business Task</h2>
 
