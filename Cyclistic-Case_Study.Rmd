@@ -14,7 +14,7 @@ output:
   <a href="https://github.com/ssites30/Cyclistic-Case_Study" target="_blank">GitHub</a>.
 </p>
 <p>Author: Shane Sites</p>
-<p>Date: 11/7/2025"</p>
+<p>Date: 11/7/2025</p>
 
 <h2 style="color:#2E86C1;">Business Task</h2>
 
