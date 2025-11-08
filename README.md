@@ -21,7 +21,7 @@ This project analyzes rider behavior for Cyclistic, a fictional bike-share compa
 - R Markdown for reproducible reporting
 - GitHub Pages for public hosting
 
-File Structure
+# File Structure
 /data — Raw input files  
 /code — R scripts and R Markdown  
 /output — Final HTML report  
