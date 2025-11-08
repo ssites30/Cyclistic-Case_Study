@@ -22,7 +22,7 @@ This project analyzes rider behavior for Cyclistic, a fictional bike-share compa
 - GitHub Pages for public hosting
 
 # File Structure
-Case Study 1_How does a bike-share navigate speedy success.pdf — Case study overview
+Case Study 1_How does a bike-share navigate speedy success.pdf — Case study overview  
 /code — R Markdown  
 /output — Final HTML report  
 index.html — Published report  
